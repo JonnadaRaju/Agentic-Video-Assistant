@@ -1,103 +1,141 @@
 .dashboard {
   min-height: 100vh;
-  background: #f5f7fa;
+  padding-bottom: 2rem;
 }
 
 .dashboard-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 2rem;
-  background: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  gap: 1rem;
+  padding: 1.1rem 1.4rem;
+  background: rgba(20, 27, 36, 0.86);
+  border-bottom: 1px solid var(--console-border);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .dashboard-header h1 {
   margin: 0;
-  color: #333;
+  color: var(--console-text);
   font-size: 1.5rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .logout-btn {
-  padding: 0.5rem 1rem;
-  background: #e53e3e;
-  color: white;
-  border: none;
-  border-radius: 5px;
+  padding: 0.55rem 1rem;
+  background: rgba(255, 93, 115, 0.16);
+  color: #ffdce1;
+  border: 1px solid rgba(255, 93, 115, 0.4);
+  border-radius: 10px;
   cursor: pointer;
-  transition: background 0.3s;
+  transition: transform 0.16s ease, background 0.2s ease;
+  font-weight: 600;
 }
 
 .logout-btn:hover {
-  background: #c53030;
+  background: rgba(255, 93, 115, 0.28);
+  transform: translateY(-1px);
 }
 
 .recorder-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  margin: 1.3rem auto 0 auto;
+  width: min(950px, calc(100% - 2rem));
+  padding: 2rem 1.2rem;
+  background:
+    linear-gradient(160deg, rgba(20, 27, 36, 0.95), rgba(12, 19, 27, 0.95)),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 24px,
+      rgba(57, 182, 255, 0.06) 24px,
+      rgba(57, 182, 255, 0.06) 25px
+    );
+  border: 1px solid var(--console-border);
+  border-radius: 18px;
+  box-shadow: var(--console-shadow);
+  color: var(--console-text);
 }
 
 .record-btn {
-  padding: 1rem 3rem;
+  padding: 1rem 2.6rem;
   font-size: 1.25rem;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 50px;
   cursor: pointer;
-  background: white;
-  color: #667eea;
-  font-weight: bold;
-  transition: all 0.3s;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  background: linear-gradient(90deg, var(--console-accent), var(--console-accent-2));
+  color: #06151c;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  box-shadow: 0 10px 20px rgba(37, 227, 164, 0.25);
 }
 
 .record-btn:hover:not(:disabled) {
-  transform: scale(1.05);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px) scale(1.01);
+  box-shadow: 0 16px 25px rgba(57, 182, 255, 0.22);
+  filter: brightness(1.03);
+}
+
+.record-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .record-btn.recording {
-  background: #e53e3e;
-  color: white;
+  background: linear-gradient(90deg, #ff5d73, #ff8f64);
+  color: #1e0d12;
   animation: pulse 1.5s infinite;
+  box-shadow: 0 10px 24px rgba(255, 93, 115, 0.32);
 }
 
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  50% { transform: scale(1.03); }
 }
 
 .recording-time {
   margin-top: 1rem;
-  font-size: 2rem;
-  font-weight: bold;
+  font-size: 1.95rem;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--console-accent);
+  text-shadow: 0 0 14px rgba(37, 227, 164, 0.3);
 }
 
 .loading {
   margin-top: 1rem;
   font-size: 1rem;
+  color: var(--console-muted);
 }
 
 .recordings-section {
-  padding: 2rem;
-  max-width: 800px;
+  padding: 1.6rem 1rem;
+  max-width: 950px;
   margin: 0 auto;
 }
 
 .recordings-section h2 {
   margin-bottom: 1rem;
-  color: #333;
+  color: var(--console-text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 1.05rem;
 }
 
 .no-recordings {
   text-align: center;
-  color: #666;
+  color: var(--console-muted);
   padding: 2rem;
-  background: white;
-  border-radius: 10px;
+  background: rgba(20, 27, 36, 0.92);
+  border: 1px solid var(--console-border);
+  border-radius: 14px;
 }
 
 .recordings-list {
@@ -110,26 +148,33 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.8rem;
   padding: 1rem;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(180deg, rgba(27, 36, 48, 0.95), rgba(18, 25, 35, 0.95));
+  border: 1px solid var(--console-border);
+  border-radius: 14px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
 }
 
 .recording-info {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  min-width: 0;
 }
 
 .filename {
-  font-weight: 500;
-  color: #333;
+  font-weight: 600;
+  color: var(--console-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .metadata {
   font-size: 0.875rem;
-  color: #666;
+  color: var(--console-muted);
+  font-family: 'IBM Plex Mono', monospace;
 }
 
 .recording-actions {
@@ -138,42 +183,84 @@
 }
 
 .play-btn, .delete-btn {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
+  min-width: 82px;
+  height: 38px;
+  border: 1px solid transparent;
+  border-radius: 999px;
   cursor: pointer;
-  font-size: 1rem;
-  transition: all 0.3s;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition: transform 0.16s ease, filter 0.2s ease;
 }
 
 .play-btn {
-  background: #48bb78;
-  color: white;
+  background: rgba(57, 182, 255, 0.16);
+  color: #dff4ff;
+  border-color: rgba(57, 182, 255, 0.45);
 }
 
 .play-btn:hover {
-  background: #38a169;
+  filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .play-btn.playing {
-  background: #ed8936;
+  background: rgba(37, 227, 164, 0.17);
+  border-color: rgba(37, 227, 164, 0.42);
+  color: #dfffee;
 }
 
 .delete-btn {
-  background: #e53e3e;
-  color: white;
+  background: rgba(255, 93, 115, 0.15);
+  color: #ffdbe1;
+  border-color: rgba(255, 93, 115, 0.45);
 }
 
 .delete-btn:hover {
-  background: #c53030;
+  filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .error-message {
-  color: #e53e3e;
+  color: #ffd7dd;
   margin-top: 1rem;
   padding: 0.5rem;
-  background: #fed7d7;
-  border-radius: 5px;
+  background: rgba(255, 93, 115, 0.16);
+  border: 1px solid rgba(255, 93, 115, 0.4);
+  border-radius: 8px;
   text-align: center;
+}
+
+@media (max-width: 760px) {
+  .dashboard-header {
+    padding: 0.9rem 1rem;
+  }
+
+  .dashboard-header h1 {
+    font-size: 1.18rem;
+  }
+
+  .recorder-section {
+    width: calc(100% - 1rem);
+    padding: 1.4rem 0.9rem;
+  }
+
+  .record-btn {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .recording-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .recording-actions {
+    width: 100%;
+  }
+
+  .play-btn, .delete-btn {
+    flex: 1;
+  }
 }
