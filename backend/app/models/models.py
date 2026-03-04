@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from pgvector.sqlalchemy import Vector
 
 from app.core.database import Base
 
@@ -25,6 +26,8 @@ class AudioRecording(Base):
     file_path = Column(String(500), nullable=False)
     file_size = Column(Integer, nullable=False)
     duration = Column(Integer, nullable=True)
+    transcript = Column(Text, nullable=True)
+    transcript_embedding = Column(Vector(1536), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="recordings")
