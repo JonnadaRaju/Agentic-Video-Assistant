@@ -18,3 +18,4 @@ uploads/
 frontend/node_modules/
 
 backend/.venv/
+mcp_server/.venv/
