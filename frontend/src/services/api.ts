@@ -23,6 +23,19 @@ export interface RecordingListItem {
   created_at: string;
 }
 
+export interface AgentStep {
+  step: string;
+  tool: string;
+  input: Record<string, unknown>;
+  output_preview: string;
+}
+
+export interface AgentQueryResponse {
+  query: string;
+  answer: string;
+  steps: AgentStep[];
+}
+
 class ApiService {
   private token: string | null = null;
 
@@ -136,6 +149,13 @@ class ApiService {
     });
     const blob = await response.blob();
     return URL.createObjectURL(blob);
+  }
+
+  async askAgent(query: string): Promise<AgentQueryResponse> {
+    return this.request<AgentQueryResponse>('/agent/query', {
+      method: 'POST',
+      body: JSON.stringify({ query }),
+    });
   }
 }
 
