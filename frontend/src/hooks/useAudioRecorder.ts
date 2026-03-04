@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface UseAudioRecorderReturn {
   isRecording: boolean;
@@ -17,14 +17,25 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+      mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
   const startRecording = useCallback(async () => {
     try {
       setError(null);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+
+      const preferredMimeType = 'audio/webm;codecs=opus';
+      const mediaRecorder = MediaRecorder.isTypeSupported(preferredMimeType)
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream);
       
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -55,7 +66,8 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       }
 
       mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blobType = chunksRef.current[0]?.type || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: blobType });
         
         mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
         
@@ -65,6 +77,7 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
         }
         
         setIsRecording(false);
+        mediaRecorderRef.current = null;
         resolve(blob);
       };
 
