@@ -1,9 +1,22 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from pgvector.sqlalchemy import Vector
 
 from app.core.database import Base
+
+try:
+    from pgvector.sqlalchemy import Vector
+    VECTOR_AVAILABLE = True
+except ModuleNotFoundError:
+    Vector = None
+    VECTOR_AVAILABLE = False
+
+
+def _embedding_column_type():
+    if VECTOR_AVAILABLE and Vector is not None:
+        return Vector(1536)
+    # Fallback keeps app bootable when pgvector package is unavailable.
+    return JSON
 
 
 class User(Base):
@@ -27,7 +40,7 @@ class AudioRecording(Base):
     file_size = Column(Integer, nullable=False)
     duration = Column(Integer, nullable=True)
     transcript = Column(Text, nullable=True)
-    transcript_embedding = Column(Vector(1536), nullable=True)
+    transcript_embedding = Column(_embedding_column_type(), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="recordings")
