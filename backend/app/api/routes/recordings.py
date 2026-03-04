@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.models.models import User, AudioRecording
+from app.models.models import User
 from app.schemas.recording import RecordingResponse, RecordingListResponse
 from app.services.auth_service import get_current_user
 from app.services.recording_service import (
@@ -31,9 +31,22 @@ async def upload_recording(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No file provided"
         )
+
+    if not file.content_type or not file.content_type.startswith("audio/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only audio files are allowed"
+        )
     
     contents = await file.read()
+    await file.close()
     file_size = len(contents)
+
+    if file_size == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty files are not allowed"
+        )
     
     max_size_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
     if file_size > max_size_bytes:
@@ -42,12 +55,13 @@ async def upload_recording(
             detail=f"File too large. Maximum size: {settings.MAX_FILE_SIZE_MB}MB"
         )
     
-    filename, file_path = await save_audio_file(contents, current_user.id)
+    _, file_path = await save_audio_file(contents, current_user.id)
+    display_filename = os.path.basename(file.filename) or "recording.webm"
     
     recording = await create_recording(
         db=db,
         user_id=current_user.id,
-        filename=file.filename,
+        filename=display_filename,
         file_path=file_path,
         file_size=file_size,
         duration=duration
