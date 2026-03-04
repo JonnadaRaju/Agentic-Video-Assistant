@@ -1,8 +1,5 @@
 import typer
 import requests
-import sys
-import io
-from pathlib import Path
 import time
 
 BASE_URL = "http://localhost:8000"
@@ -65,7 +62,7 @@ def test_duplicate_registration():
 def test_invalid_authentication():
     url = f"{BASE_URL}/auth/login"
     try:
-        r = requests.post(url, params={"email": "wrong@example.com", "password": "wrongpass"})
+        r = requests.post(url, json={"email": "wrong@example.com", "password": "wrongpass"})
         passed = r.status_code == 401
         record_test("Invalid Authentication", passed, r.status_code, r.text)
         return passed
@@ -77,7 +74,7 @@ def test_invalid_authentication():
 def test_valid_login():
     url = f"{BASE_URL}/auth/login"
     try:
-        r = requests.post(url, params={"email": TEST_EMAIL, "password": TEST_PASSWORD})
+        r = requests.post(url, json={"email": TEST_EMAIL, "password": TEST_PASSWORD})
         passed = r.status_code == 200 and "access_token" in r.json()
         if passed:
             token = r.json()["access_token"]
@@ -121,7 +118,7 @@ def test_invalid_file_upload(token: str):
     try:
         files = {"file": ("test.txt", b"not audio", "text/plain")}
         r = requests.post(url, files=files, headers=headers)
-        passed = r.status_code != 401
+        passed = r.status_code == 400
         record_test("Invalid File Upload", passed, r.status_code, r.text)
         return passed
     except Exception as e:
@@ -202,16 +199,12 @@ def test_stream_recording(token: str, recording_id: int):
 
 
 def test_unauthorized_access():
-    url = f"{BASE_URL}/auth/login"
+    url = f"{BASE_URL}/recordings"
     try:
-        r = requests.post(url, params={"email": "test@example.com", "password": "testpass123"})
-        if r.status_code == 200:
-            token = r.json()["access_token"]
-            url2 = f"{BASE_URL}/recordings/1"
-            r2 = requests.get(url2, headers={"Authorization": f"Bearer wrong_token"})
-            passed = r2.status_code == 401
-            record_test("Unauthorized Access", passed, r2.status_code, r2.text)
-            return passed
+        r = requests.get(url, headers={"Authorization": "Bearer wrong_token"})
+        passed = r.status_code == 401
+        record_test("Unauthorized Access", passed, r.status_code, r.text)
+        return passed
     except Exception as e:
         record_test("Unauthorized Access", False, 0, str(e))
         return False
