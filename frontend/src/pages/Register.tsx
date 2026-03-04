@@ -3,11 +3,11 @@ import { apiService } from '../services/api';
 import './Auth.css';
 
 interface RegisterProps {
-  onRegister: () => void;
   onSwitchToLogin: () => void;
+  onRegisterSuccess: (message: string) => void;
 }
 
-export const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin }) => {
+export const Register: React.FC<RegisterProps> = ({ onSwitchToLogin, onRegisterSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,9 +20,7 @@ export const Register: React.FC<RegisterProps> = ({ onRegister, onSwitchToLogin 
 
     try {
       await apiService.register(email, password);
-      const response = await apiService.login(email, password);
-      apiService.setToken(response.access_token);
-      onRegister();
+      onRegisterSuccess('Registration successful. Please login with your new account.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
