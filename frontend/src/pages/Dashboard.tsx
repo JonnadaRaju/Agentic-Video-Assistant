@@ -21,7 +21,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     stopRecording,
     error: recorderError
   } = useAudioRecorder();
-  
+
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
 
@@ -75,11 +75,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const uploadRecording = async (blob: Blob) => {
     setUploading(true);
     setError(null);
-    
+
     try {
       const filename = `recording_${Date.now()}.webm`;
       const file = new File([blob], filename, { type: 'audio/webm' });
-      
+
       await apiService.uploadRecording(file, recordingTime);
       await fetchRecordings();
     } catch (err) {
@@ -118,7 +118,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     if (!window.confirm('Are you sure you want to delete this recording?')) {
       return;
     }
-    
+
     try {
       await apiService.deleteRecording(id);
       await fetchRecordings();
@@ -183,7 +183,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 <div className="recording-info">
                   <span className="filename">{recording.filename}</span>
                   <span className="metadata">
-                    {formatDate(recording.created_at)} • {formatFileSize(recording.file_size)} • {formatDuration(recording.duration)}
+                    {formatDate(recording.created_at)} | {formatFileSize(recording.file_size)} | {formatDuration(recording.duration)}
                   </span>
                 </div>
                 <div className="recording-actions">
@@ -191,13 +191,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                     className={`play-btn ${currentlyPlaying === recording.id ? 'playing' : ''}`}
                     onClick={() => handlePlay(recording)}
                   >
-                    {currentlyPlaying === recording.id ? '⏸' : '▶'}
+                    {currentlyPlaying === recording.id ? 'Pause' : 'Play'}
                   </button>
                   <button
                     className="delete-btn"
                     onClick={() => handleDelete(recording.id)}
                   >
-                    🗑
+                    Delete
                   </button>
                 </div>
               </div>
@@ -208,3 +208,4 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     </div>
   );
 };
+
