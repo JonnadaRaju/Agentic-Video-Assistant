@@ -7,3 +7,10 @@ logs/
 *.env
 .entire
 .opencode
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
