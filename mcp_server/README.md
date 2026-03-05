@@ -1,6 +1,8 @@
-# Audio Intelligence MCP Server
+# Media Intelligence MCP Server
 
 ## Tools
+
+Audio tools (existing):
 
 - `list_recordings(user_id, token?)`
 - `get_recording_metadata(recording_id, token?)`
@@ -8,6 +10,15 @@
 - `summarize_audio(recording_id, token?)`
 - `search_recordings(query, limit?, token?)`
 - `answer_question_about_recordings(question, limit?, token?)`
+
+Video tools (new):
+
+- `list_videos(user_id, token?)`
+- `get_video_metadata(video_id, token?)`
+- `transcribe_video(video_id, token?)`
+- `summarize_video(video_id, token?)`
+- `search_videos(query, limit?, token?)`
+- `answer_question_about_videos(question, limit?, token?)`
 
 ## Setup
 
@@ -34,5 +45,4 @@ pip install -r requirements.txt
 
 - Tool inputs are strongly typed.
 - Query/question fields are sanitized and checked for prompt-injection markers.
-- Recording access remains JWT-scoped to the authenticated user in FastAPI.
-
+- User ownership and access control are enforced by FastAPI JWT-scoped endpoints.
