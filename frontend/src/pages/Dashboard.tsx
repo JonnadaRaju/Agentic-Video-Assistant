@@ -22,6 +22,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
 
   const [recordingName, setRecordingName] = useState('');
   const [videoName, setVideoName] = useState('');
+  const [activeRecorder, setActiveRecorder] = useState<'audio' | 'video'>('audio');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [videoSearchQuery, setVideoSearchQuery] = useState('');
@@ -400,67 +401,86 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
         <button onClick={onLogout} className="logout-btn">Logout</button>
       </header>
 
-      <div className="recorder-section">
-        <h2>Audio Recording</h2>
-        <input
-          type="text"
-          className="recording-name-input"
-          placeholder="Audio filename (optional)"
-          value={recordingName}
-          onChange={(e) => setRecordingName(e.target.value)}
-          disabled={isRecording || uploadingAudio}
-          maxLength={80}
-        />
+      <div className="recorder-tabs">
         <button
-          className={`record-btn ${isRecording ? 'recording' : ''}`}
-          onClick={handleAudioRecord}
-          disabled={uploadingAudio}
+          className={`recorder-tab-btn ${activeRecorder === 'audio' ? 'active' : ''}`}
+          onClick={() => setActiveRecorder('audio')}
         >
-          {isRecording ? 'Stop Audio Recording' : 'Start Audio Recording'}
+          Audio
         </button>
-        <div className="recording-name-hint">
-          Audio recording uploads automatically when you stop.
-        </div>
-        {isRecording && <div className="recording-time">{formatDuration(recordingTime)}</div>}
+        <button
+          className={`recorder-tab-btn ${activeRecorder === 'video' ? 'active' : ''}`}
+          onClick={() => setActiveRecorder('video')}
+        >
+          Video
+        </button>
       </div>
 
-      <div className="recorder-section video-recorder-section">
-        <h2>Video Recording</h2>
-        <input
-          type="text"
-          className="recording-name-input"
-          placeholder="Video filename (optional)"
-          value={videoName}
-          onChange={(e) => setVideoName(e.target.value)}
-          disabled={isVideoRecording || uploadingVideo}
-          maxLength={80}
-        />
-
-        <div className="video-record-controls">
-          <button className="record-btn" onClick={handleStartVideo} disabled={isVideoRecording || uploadingVideo}>
-            Start Recording
+      {activeRecorder === 'audio' && (
+        <div className="recorder-section">
+          <h2>Audio Recording</h2>
+          <input
+            type="text"
+            className="recording-name-input"
+            placeholder="Audio filename (optional)"
+            value={recordingName}
+            onChange={(e) => setRecordingName(e.target.value)}
+            disabled={isRecording || uploadingAudio}
+            maxLength={80}
+          />
+          <button
+            className={`record-btn ${isRecording ? 'recording' : ''}`}
+            onClick={handleAudioRecord}
+            disabled={uploadingAudio}
+          >
+            {isRecording ? 'Stop Audio Recording' : 'Start Audio Recording'}
           </button>
-          <button className="record-btn recording" onClick={handleStopVideo} disabled={!isVideoRecording}>
-            Stop Recording
-          </button>
-          <button className="assistant-btn" onClick={handleUploadVideo} disabled={!pendingVideoBlob || isVideoRecording || uploadingVideo}>
-            {uploadingVideo ? 'Uploading...' : 'Upload'}
-          </button>
+          <div className="recording-name-hint">
+            Audio recording uploads automatically when you stop.
+          </div>
+          {isRecording && <div className="recording-time">{formatDuration(recordingTime)}</div>}
         </div>
-        <div className="recording-name-hint">
-          Video uploads automatically when you stop. Use Upload only to retry a failed upload.
+      )}
+
+      {activeRecorder === 'video' && (
+        <div className="recorder-section video-recorder-section">
+          <h2>Video Recording</h2>
+          <input
+            type="text"
+            className="recording-name-input"
+            placeholder="Video filename (optional)"
+            value={videoName}
+            onChange={(e) => setVideoName(e.target.value)}
+            disabled={isVideoRecording || uploadingVideo}
+            maxLength={80}
+          />
+
+          <div className="video-record-controls">
+            <button className="record-btn" onClick={handleStartVideo} disabled={isVideoRecording || uploadingVideo}>
+              Start Recording
+            </button>
+            <button className="record-btn recording" onClick={handleStopVideo} disabled={!isVideoRecording}>
+              Stop Recording
+            </button>
+            <button className="assistant-btn" onClick={handleUploadVideo} disabled={!pendingVideoBlob || isVideoRecording || uploadingVideo}>
+              {uploadingVideo ? 'Uploading...' : 'Upload'}
+            </button>
+          </div>
+          <div className="recording-name-hint">
+            Video uploads automatically when you stop. Use Upload only to retry a failed upload.
+          </div>
+
+          {isVideoRecording && <div className="recording-time">{formatDuration(videoRecordingTime)}</div>}
+
+          {isVideoRecording && (
+            <video ref={liveVideoPreviewRef} className="video-preview" autoPlay muted playsInline />
+          )}
+
+          {!isVideoRecording && pendingVideoPreviewUrl && (
+            <video className="video-preview" controls src={pendingVideoPreviewUrl} />
+          )}
         </div>
-
-        {isVideoRecording && <div className="recording-time">{formatDuration(videoRecordingTime)}</div>}
-
-        {isVideoRecording && (
-          <video ref={liveVideoPreviewRef} className="video-preview" autoPlay muted playsInline />
-        )}
-
-        {!isVideoRecording && pendingVideoPreviewUrl && (
-          <video className="video-preview" controls src={pendingVideoPreviewUrl} />
-        )}
-      </div>
+      )}
 
       {(uploadingAudio || uploadingVideo || loading) && (
         <div className="loading">
