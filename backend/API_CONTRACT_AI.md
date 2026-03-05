@@ -6,32 +6,82 @@ All endpoints below require:
 
 - `Authorization: Bearer <jwt>`
 
-## 1) Transcribe Recording
+## Audio Endpoints
 
 ### `POST /recordings/{id}/transcribe`
 
-Transcribes one recording and stores transcript + embedding.
+Transcribes one audio recording and stores transcript + embedding.
 
-#### Response `200`
+### `POST /recordings/search`
+
+Semantic search over audio transcripts.
+
+### `POST /recordings/{id}/summarize`
+
+Summarizes one audio recording transcript (auto-transcribes first when needed).
+
+### `POST /recordings/answer`
+
+Answers a question using matching audio transcripts.
+
+## Video Endpoints
+
+### `POST /videos/upload`
+
+Uploads a video file, stores metadata, and persists file under `uploads/videos/<user_id>/...`.
+
+### `GET /videos`
+
+Returns authenticated user's videos (latest first).
+
+### `GET /videos/{id}`
+
+Returns one video metadata record.
+
+### `DELETE /videos/{id}`
+
+Deletes one video and its stored file.
+
+### `GET /videos/{id}/stream`
+
+Streams one owned video file.
+
+### `POST /videos/{id}/transcribe`
+
+Pipeline:
+
+1. Extract audio with FFmpeg
+2. Transcribe extracted audio (Sarvam-configured path with fallback)
+3. Store transcript and embedding
+
+Response:
 
 ```json
 {
-  "recording_id": 42,
+  "video_id": 42,
   "transcript": "Full transcript text...",
   "transcript_preview": "First 240 chars..."
 }
 ```
 
-#### Errors
+### `POST /videos/{id}/summarize`
 
-- `404` recording not found (or not owned by caller)
-- `503` transcription provider unavailable / misconfigured
+Generates/stores summary using Groq-configured chat path (fallback supported).
 
-## 2) Semantic Search
+Response:
 
-### `POST /recordings/search`
+```json
+{
+  "video_id": 42,
+  "summary": "Concise summary of the video."
+}
+```
 
-#### Request
+### `POST /videos/search`
+
+Semantic search over video transcripts.
+
+Request:
 
 ```json
 {
@@ -40,7 +90,7 @@ Transcribes one recording and stores transcript + embedding.
 }
 ```
 
-#### Response `200`
+Response:
 
 ```json
 {
@@ -49,7 +99,7 @@ Transcribes one recording and stores transcript + embedding.
   "results": [
     {
       "id": 42,
-      "filename": "meeting.webm",
+      "filename": "meeting.mp4",
       "duration": 135,
       "created_at": "2026-03-04T12:00:00",
       "transcript_preview": "We discussed project deadlines..."
@@ -58,74 +108,56 @@ Transcribes one recording and stores transcript + embedding.
 }
 ```
 
-#### Errors
+### `POST /videos/answer`
 
-- `400` invalid query / blocked by guardrail / embedding failure
+Question answering grounded on matching video transcripts.
 
-## 3) Summarize Recording
-
-### `POST /recordings/{id}/summarize`
-
-Transcribes first if transcript is missing.
-
-#### Response `200`
+Request:
 
 ```json
 {
-  "recording_id": 42,
-  "summary": "Concise summary of the recording."
-}
-```
-
-## 4) Ask Question Across Recordings
-
-### `POST /recordings/answer`
-
-#### Request
-
-```json
-{
-  "question": "What did I say about deadlines?",
+  "question": "What did I say about deadlines in my videos?",
   "limit": 5
 }
 ```
 
-#### Response `200`
+Response:
 
 ```json
 {
-  "question": "What did I say about deadlines?",
+  "question": "What did I say about deadlines in my videos?",
   "answer": "You said deadlines were moved to next Friday.",
-  "matched_recording_ids": [42, 43]
+  "matched_video_ids": [42, 43]
 }
 ```
 
-## 5) Agent Query (Reasoning + Tools)
+## Agent Endpoint
 
 ### `POST /agent/query`
 
-#### Request
+Supports audio-only, video-only, and combined audio+video retrieval/reasoning.
+
+Request:
 
 ```json
 {
-  "query": "Summarize my latest recording."
+  "query": "Summarize my latest video"
 }
 ```
 
-#### Response `200`
+Response:
 
 ```json
 {
-  "query": "Summarize my latest recording.",
+  "query": "Summarize my latest video",
   "answer": "Summary text...",
   "steps": [
     {
       "step": "1",
-      "tool": "list_recordings",
+      "tool": "list_videos",
       "input": {"user_id": 1},
-      "output_preview": "Found 4 recordings"
+      "output_preview": "Found 3 videos"
     }
   ]
 }
 ```
-
