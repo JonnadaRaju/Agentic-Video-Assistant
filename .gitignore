@@ -7,6 +7,7 @@ logs/
 *.env
 .entire
 .opencode
+.gemini
 
 __pycache__/
 *.pyc
