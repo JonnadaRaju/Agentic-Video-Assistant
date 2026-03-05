@@ -25,6 +25,10 @@ async def query_agent(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Agent query failed: {type(exc).__name__}: {exc}",
+        )
 
     return AgentQueryResponse(query=request.query, answer=answer, steps=steps)
-
