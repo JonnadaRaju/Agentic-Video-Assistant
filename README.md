@@ -308,10 +308,6 @@ Additional recommended hardening:
   - `EMBEDDING_API_KEY=<your_key>` (embedding-only override)
 - Restart the backend after editing `.env`.
 
-### Windows PowerShell `npm.ps1` blocked
-
-- Run npm via `cmd /c npm ...` or adjust execution policy.
-
 ## 14) Next Improvements
 
 1. Replace raw SQL migrations with Alembic migration pipeline.
