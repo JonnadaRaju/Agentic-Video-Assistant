@@ -23,7 +23,7 @@ async def get_db():
 async def init_db():
     # Keep extension creation in a separate transaction so failure doesn't poison
     # metadata creation for users lacking CREATE EXTENSION privileges.
-    if settings.DATABASE_URL.startswith("postgresql"):
+    if settings.USE_PGVECTOR and settings.DATABASE_URL.startswith("postgresql"):
         async with engine.begin() as conn:
             try:
                 await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
@@ -35,9 +35,8 @@ async def init_db():
 
     # Lightweight forward-compatible schema patch for existing deployments
     # that were created before AI/video columns were introduced.
-    if settings.DATABASE_URL.startswith("postgresql"):
-        vector_type_available = False
-
+    vector_type_available = False
+    if settings.USE_PGVECTOR and settings.DATABASE_URL.startswith("postgresql"):
         async with engine.begin() as conn:
             try:
                 result = await conn.execute(
@@ -47,46 +46,72 @@ async def init_db():
             except Exception as exc:
                 logger.warning("Could not detect vector type availability: %s", exc)
 
-        # Run each DDL statement in its own transaction to avoid a failed ALTER
-        # leaving the transaction in an aborted state and rolling back prior steps.
-        schema_patch_statements = [
-            "ALTER TABLE audio_recordings ADD COLUMN IF NOT EXISTS transcript TEXT",
-            "ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS transcript TEXT",
-            "ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS summary TEXT",
+    # Run each DDL statement in its own transaction to avoid a failed ALTER
+    # leaving the transaction in an aborted state and rolling back prior steps.
+    schema_patch_statements = [
+        "ALTER TABLE audio_recordings ADD COLUMN IF NOT EXISTS transcript TEXT",
+        "ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS transcript TEXT",
+        "ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS summary TEXT",
+    ]
+
+    embedding_column_type = "VECTOR(1536)" if vector_type_available else "JSONB"
+    schema_patch_statements.extend(
+        [
+            f"ALTER TABLE audio_recordings ADD COLUMN IF NOT EXISTS transcript_embedding {embedding_column_type}",
+            f"ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS transcript_embedding {embedding_column_type}",
+        ]
+    )
+
+    for statement in schema_patch_statements:
+        async with engine.begin() as conn:
+            try:
+                await conn.execute(text(statement))
+            except Exception as exc:
+                logger.warning("Could not apply schema patch (%s): %s", statement, exc)
+
+    if vector_type_available:
+        conversion_statements = [
+            """
+            ALTER TABLE audio_recordings
+            ALTER COLUMN transcript_embedding TYPE vector(1536)
+            USING CASE
+              WHEN transcript_embedding IS NULL THEN NULL
+              ELSE transcript_embedding::text::vector
+            END
+            """,
+            """
+            ALTER TABLE video_recordings
+            ALTER COLUMN transcript_embedding TYPE vector(1536)
+            USING CASE
+              WHEN transcript_embedding IS NULL THEN NULL
+              ELSE transcript_embedding::text::vector
+            END
+            """,
         ]
 
-        embedding_column_type = "VECTOR(1536)" if vector_type_available else "JSONB"
-        schema_patch_statements.extend(
-            [
-                f"ALTER TABLE audio_recordings ADD COLUMN IF NOT EXISTS transcript_embedding {embedding_column_type}",
-                f"ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS transcript_embedding {embedding_column_type}",
-            ]
-        )
-
-        for statement in schema_patch_statements:
+        for statement in conversion_statements:
             async with engine.begin() as conn:
                 try:
                     await conn.execute(text(statement))
                 except Exception as exc:
-                    logger.warning("Could not apply schema patch (%s): %s", statement, exc)
+                    logger.warning("Could not convert embeddings to vector (%s): %s", statement.strip(), exc)
 
-        if vector_type_available:
-            vector_index_statements = [
-                (
-                    "CREATE INDEX IF NOT EXISTS idx_audio_recordings_transcript_embedding "
-                    "ON audio_recordings USING ivfflat (transcript_embedding vector_cosine_ops) "
-                    "WITH (lists = 100)"
-                ),
-                (
-                    "CREATE INDEX IF NOT EXISTS idx_video_recordings_transcript_embedding "
-                    "ON video_recordings USING ivfflat (transcript_embedding vector_cosine_ops) "
-                    "WITH (lists = 100)"
-                ),
-            ]
+        vector_index_statements = [
+            (
+                "CREATE INDEX IF NOT EXISTS idx_audio_recordings_transcript_embedding "
+                "ON audio_recordings USING ivfflat (transcript_embedding vector_cosine_ops) "
+                "WITH (lists = 100)"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS idx_video_recordings_transcript_embedding "
+                "ON video_recordings USING ivfflat (transcript_embedding vector_cosine_ops) "
+                "WITH (lists = 100)"
+            ),
+        ]
 
-            for statement in vector_index_statements:
-                async with engine.begin() as conn:
-                    try:
-                        await conn.execute(text(statement))
-                    except Exception as exc:
-                        logger.warning("Could not apply vector index patch (%s): %s", statement, exc)
+        for statement in vector_index_statements:
+            async with engine.begin() as conn:
+                try:
+                    await conn.execute(text(statement))
+                except Exception as exc:
+                    logger.warning("Could not apply vector index patch (%s): %s", statement, exc)
