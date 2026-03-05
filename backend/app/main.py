@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import init_db
-from app.api.routes import auth, recordings, agent
+from app.api.routes import auth, recordings, videos, agent
 
 
 @asynccontextmanager
@@ -13,8 +13,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Audio Recorder API",
-    description="API for recording, storing, and playing audio files",
+    title="Audio and Video Recorder API",
+    description="API for recording, storing, streaming, and understanding audio/video files",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -29,6 +29,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(recordings.router)
+app.include_router(videos.router)
 app.include_router(agent.router)
 
 
