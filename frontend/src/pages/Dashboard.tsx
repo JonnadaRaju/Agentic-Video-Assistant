@@ -394,6 +394,143 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     }
   };
 
+  const renderAudioRecordings = () => (
+    <div className="recordings-section">
+      <h2>Your Audio Recordings</h2>
+      <div className="recordings-toolbar">
+        <input
+          type="search"
+          className="search-input"
+          placeholder="Search audio by filename..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <span className="search-count">{filteredRecordings.length} / {recordings.length}</span>
+      </div>
+
+      {recordings.length === 0 && !loading ? (
+        <p className="no-recordings">No audio recordings yet.</p>
+      ) : filteredRecordings.length === 0 ? (
+        <p className="no-recordings">No audio recordings match your search.</p>
+      ) : (
+        <div className="recordings-list">
+          {filteredRecordings.map((recording) => (
+            <div key={recording.id} className="recording-item">
+              <div className="recording-info">
+                <span className="filename">{recording.filename}</span>
+                <span className="metadata">
+                  {formatDate(recording.created_at)} | {formatFileSize(recording.file_size)} | {formatDuration(recording.duration)}
+                </span>
+              </div>
+              <div className="recording-actions">
+                <button
+                  className={`play-btn ${currentlyPlayingAudio === recording.id ? 'playing' : ''}`}
+                  onClick={() => handlePlayAudio(recording)}
+                >
+                  {currentlyPlayingAudio === recording.id ? 'Pause' : 'Play'}
+                </button>
+                <button className="delete-btn" onClick={() => handleDeleteAudio(recording.id)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderVideoRecordings = () => (
+    <div className="recordings-section">
+      <h2>Your Videos</h2>
+      <div className="recordings-toolbar">
+        <input
+          type="search"
+          className="search-input"
+          placeholder="Search videos by filename..."
+          value={videoSearchQuery}
+          onChange={(e) => setVideoSearchQuery(e.target.value)}
+        />
+        <span className="search-count">{filteredVideos.length} / {videos.length}</span>
+      </div>
+
+      {videos.length === 0 && !loading ? (
+        <p className="no-recordings">No videos yet.</p>
+      ) : filteredVideos.length === 0 ? (
+        <p className="no-recordings">No videos match your search.</p>
+      ) : (
+        <div className="recordings-list">
+          {filteredVideos.map((video) => (
+            <div key={video.id} className="recording-item video-item">
+              <div className="recording-info">
+                <span className="filename">{video.filename}</span>
+                <span className="metadata">
+                  {formatDate(video.created_at)} | {formatFileSize(video.file_size)} | {formatDuration(video.duration)}
+                </span>
+                {video.summary && <span className="metadata">Summary: {video.summary}</span>}
+              </div>
+              <div className="recording-actions">
+                <button
+                  className={`play-btn ${currentlyPlayingVideo === video.id ? 'playing' : ''}`}
+                  onClick={() => handlePlayVideo(video)}
+                >
+                  {currentlyPlayingVideo === video.id ? 'Hide' : 'Play'}
+                </button>
+                <button className="delete-btn" onClick={() => handleDeleteVideo(video.id)}>
+                  Delete
+                </button>
+              </div>
+
+              {currentlyPlayingVideo === video.id && currentlyPlayingVideoUrl && (
+                <video className="video-player" controls autoPlay src={currentlyPlayingVideoUrl} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderAssistant = (context: 'audio' | 'video') => (
+    <div className="assistant-section">
+      <h2>AI Assistant</h2>
+      <form className="assistant-form" onSubmit={handleAskAssistant}>
+        <input
+          type="text"
+          className="assistant-input"
+          placeholder={`Ask about your ${context} recordings...`}
+          value={assistantQuery}
+          onChange={(e) => setAssistantQuery(e.target.value)}
+          disabled={assistantLoading}
+        />
+        <button className="assistant-btn" type="submit" disabled={assistantLoading}>
+          {assistantLoading ? 'Thinking...' : 'Ask'}
+        </button>
+      </form>
+      {assistantError && <div className="error-message">{assistantError}</div>}
+      {assistantHistory.length === 0 ? (
+        <p className="no-recordings">No assistant queries yet.</p>
+      ) : (
+        <div className="assistant-history">
+          {assistantHistory.map((item, idx) => (
+            <div key={`${item.query}-${idx}`} className="assistant-item">
+              <p className="assistant-query"><strong>Q:</strong> {item.query}</p>
+              <p className="assistant-answer"><strong>A:</strong> {item.answer}</p>
+              <div className="assistant-steps">
+                {item.steps.map((step) => (
+                  <div key={`${idx}-${step.step}-${step.tool}`} className="assistant-step">
+                    <span className="assistant-step-tool">{step.tool}</span>
+                    <span className="assistant-step-preview">{step.output_preview}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
@@ -417,69 +554,77 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       </div>
 
       {activeRecorder === 'audio' && (
-        <div className="recorder-section">
-          <h2>Audio Recording</h2>
-          <input
-            type="text"
-            className="recording-name-input"
-            placeholder="Audio filename (optional)"
-            value={recordingName}
-            onChange={(e) => setRecordingName(e.target.value)}
-            disabled={isRecording || uploadingAudio}
-            maxLength={80}
-          />
-          <button
-            className={`record-btn ${isRecording ? 'recording' : ''}`}
-            onClick={handleAudioRecord}
-            disabled={uploadingAudio}
-          >
-            {isRecording ? 'Stop Audio Recording' : 'Start Audio Recording'}
-          </button>
-          <div className="recording-name-hint">
-            Audio recording uploads automatically when you stop.
+        <>
+          <div className="recorder-section">
+            <h2>Audio Recording</h2>
+            <input
+              type="text"
+              className="recording-name-input"
+              placeholder="Audio filename (optional)"
+              value={recordingName}
+              onChange={(e) => setRecordingName(e.target.value)}
+              disabled={isRecording || uploadingAudio}
+              maxLength={80}
+            />
+            <button
+              className={`record-btn ${isRecording ? 'recording' : ''}`}
+              onClick={handleAudioRecord}
+              disabled={uploadingAudio}
+            >
+              {isRecording ? 'Stop Audio Recording' : 'Start Audio Recording'}
+            </button>
+            <div className="recording-name-hint">
+              Audio recording uploads automatically when you stop.
+            </div>
+            {isRecording && <div className="recording-time">{formatDuration(recordingTime)}</div>}
           </div>
-          {isRecording && <div className="recording-time">{formatDuration(recordingTime)}</div>}
-        </div>
+          {renderAudioRecordings()}
+          {renderAssistant('audio')}
+        </>
       )}
 
       {activeRecorder === 'video' && (
-        <div className="recorder-section video-recorder-section">
-          <h2>Video Recording</h2>
-          <input
-            type="text"
-            className="recording-name-input"
-            placeholder="Video filename (optional)"
-            value={videoName}
-            onChange={(e) => setVideoName(e.target.value)}
-            disabled={isVideoRecording || uploadingVideo}
-            maxLength={80}
-          />
+        <>
+          <div className="recorder-section video-recorder-section">
+            <h2>Video Recording</h2>
+            <input
+              type="text"
+              className="recording-name-input"
+              placeholder="Video filename (optional)"
+              value={videoName}
+              onChange={(e) => setVideoName(e.target.value)}
+              disabled={isVideoRecording || uploadingVideo}
+              maxLength={80}
+            />
 
-          <div className="video-record-controls">
-            <button className="record-btn" onClick={handleStartVideo} disabled={isVideoRecording || uploadingVideo}>
-              Start Recording
-            </button>
-            <button className="record-btn recording" onClick={handleStopVideo} disabled={!isVideoRecording}>
-              Stop Recording
-            </button>
-            <button className="assistant-btn" onClick={handleUploadVideo} disabled={!pendingVideoBlob || isVideoRecording || uploadingVideo}>
-              {uploadingVideo ? 'Uploading...' : 'Upload'}
-            </button>
+            <div className="video-record-controls">
+              <button className="record-btn" onClick={handleStartVideo} disabled={isVideoRecording || uploadingVideo}>
+                Start Recording
+              </button>
+              <button className="record-btn recording" onClick={handleStopVideo} disabled={!isVideoRecording}>
+                Stop Recording
+              </button>
+              <button className="assistant-btn" onClick={handleUploadVideo} disabled={!pendingVideoBlob || isVideoRecording || uploadingVideo}>
+                {uploadingVideo ? 'Uploading...' : 'Upload'}
+              </button>
+            </div>
+            <div className="recording-name-hint">
+              Video uploads automatically when you stop. Use Upload only to retry a failed upload.
+            </div>
+
+            {isVideoRecording && <div className="recording-time">{formatDuration(videoRecordingTime)}</div>}
+
+            {isVideoRecording && (
+              <video ref={liveVideoPreviewRef} className="video-preview" autoPlay muted playsInline />
+            )}
+
+            {!isVideoRecording && pendingVideoPreviewUrl && (
+              <video className="video-preview" controls src={pendingVideoPreviewUrl} />
+            )}
           </div>
-          <div className="recording-name-hint">
-            Video uploads automatically when you stop. Use Upload only to retry a failed upload.
-          </div>
-
-          {isVideoRecording && <div className="recording-time">{formatDuration(videoRecordingTime)}</div>}
-
-          {isVideoRecording && (
-            <video ref={liveVideoPreviewRef} className="video-preview" autoPlay muted playsInline />
-          )}
-
-          {!isVideoRecording && pendingVideoPreviewUrl && (
-            <video className="video-preview" controls src={pendingVideoPreviewUrl} />
-          )}
-        </div>
+          {renderVideoRecordings()}
+          {renderAssistant('video')}
+        </>
       )}
 
       {(uploadingAudio || uploadingVideo || loading) && (
@@ -490,138 +635,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       {(error || recorderError || videoRecorderError) && (
         <div className="error-message">{error || recorderError || videoRecorderError}</div>
       )}
-
-      <div className="recordings-section">
-        <h2>Your Audio Recordings</h2>
-        <div className="recordings-toolbar">
-          <input
-            type="search"
-            className="search-input"
-            placeholder="Search audio by filename..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <span className="search-count">{filteredRecordings.length} / {recordings.length}</span>
-        </div>
-
-        {recordings.length === 0 && !loading ? (
-          <p className="no-recordings">No audio recordings yet.</p>
-        ) : filteredRecordings.length === 0 ? (
-          <p className="no-recordings">No audio recordings match your search.</p>
-        ) : (
-          <div className="recordings-list">
-            {filteredRecordings.map((recording) => (
-              <div key={recording.id} className="recording-item">
-                <div className="recording-info">
-                  <span className="filename">{recording.filename}</span>
-                  <span className="metadata">
-                    {formatDate(recording.created_at)} | {formatFileSize(recording.file_size)} | {formatDuration(recording.duration)}
-                  </span>
-                </div>
-                <div className="recording-actions">
-                  <button
-                    className={`play-btn ${currentlyPlayingAudio === recording.id ? 'playing' : ''}`}
-                    onClick={() => handlePlayAudio(recording)}
-                  >
-                    {currentlyPlayingAudio === recording.id ? 'Pause' : 'Play'}
-                  </button>
-                  <button className="delete-btn" onClick={() => handleDeleteAudio(recording.id)}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="recordings-section">
-        <h2>Your Videos</h2>
-        <div className="recordings-toolbar">
-          <input
-            type="search"
-            className="search-input"
-            placeholder="Search videos by filename..."
-            value={videoSearchQuery}
-            onChange={(e) => setVideoSearchQuery(e.target.value)}
-          />
-          <span className="search-count">{filteredVideos.length} / {videos.length}</span>
-        </div>
-
-        {videos.length === 0 && !loading ? (
-          <p className="no-recordings">No videos yet.</p>
-        ) : filteredVideos.length === 0 ? (
-          <p className="no-recordings">No videos match your search.</p>
-        ) : (
-          <div className="recordings-list">
-            {filteredVideos.map((video) => (
-              <div key={video.id} className="recording-item video-item">
-                <div className="recording-info">
-                  <span className="filename">{video.filename}</span>
-                  <span className="metadata">
-                    {formatDate(video.created_at)} | {formatFileSize(video.file_size)} | {formatDuration(video.duration)}
-                  </span>
-                  {video.summary && <span className="metadata">Summary: {video.summary}</span>}
-                </div>
-                <div className="recording-actions">
-                  <button
-                    className={`play-btn ${currentlyPlayingVideo === video.id ? 'playing' : ''}`}
-                    onClick={() => handlePlayVideo(video)}
-                  >
-                    {currentlyPlayingVideo === video.id ? 'Hide' : 'Play'}
-                  </button>
-                  <button className="delete-btn" onClick={() => handleDeleteVideo(video.id)}>
-                    Delete
-                  </button>
-                </div>
-
-                {currentlyPlayingVideo === video.id && currentlyPlayingVideoUrl && (
-                  <video className="video-player" controls autoPlay src={currentlyPlayingVideoUrl} />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="assistant-section">
-        <h2>AI Assistant</h2>
-        <form className="assistant-form" onSubmit={handleAskAssistant}>
-          <input
-            type="text"
-            className="assistant-input"
-            placeholder="Ask about your audio and video recordings..."
-            value={assistantQuery}
-            onChange={(e) => setAssistantQuery(e.target.value)}
-            disabled={assistantLoading}
-          />
-          <button className="assistant-btn" type="submit" disabled={assistantLoading}>
-            {assistantLoading ? 'Thinking...' : 'Ask'}
-          </button>
-        </form>
-
-        {assistantError && <div className="error-message">{assistantError}</div>}
-        {assistantHistory.length === 0 ? (
-          <p className="no-recordings">No assistant queries yet.</p>
-        ) : (
-          <div className="assistant-history">
-            {assistantHistory.map((item, idx) => (
-              <div key={`${item.query}-${idx}`} className="assistant-item">
-                <p className="assistant-query"><strong>Q:</strong> {item.query}</p>
-                <p className="assistant-answer"><strong>A:</strong> {item.answer}</p>
-                <div className="assistant-steps">
-                  {item.steps.map((step) => (
-                    <div key={`${idx}-${step.step}-${step.tool}`} className="assistant-step">
-                      <span className="assistant-step-tool">{step.tool}</span>
-                      <span className="assistant-step-preview">{step.output_preview}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
     </div>
   );
 };
