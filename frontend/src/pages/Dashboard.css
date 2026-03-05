@@ -137,6 +137,32 @@
   font-size: 0.85rem;
 }
 
+.recorder-section h2 {
+  margin-bottom: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 1rem;
+}
+
+.video-recorder-section {
+  margin-top: 1rem;
+}
+
+.video-record-controls {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.video-preview {
+  width: min(560px, 100%);
+  margin-top: 1rem;
+  border: 1px solid var(--console-border);
+  border-radius: 12px;
+  background: rgba(7, 11, 16, 0.95);
+}
+
 .loading {
   margin-top: 1rem;
   font-size: 1rem;
@@ -216,6 +242,11 @@
   border: 1px solid var(--console-border);
   border-radius: 14px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+.video-item {
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .recording-info {
@@ -388,6 +419,14 @@
   color: var(--console-muted);
 }
 
+.video-player {
+  width: 100%;
+  margin-top: 0.8rem;
+  border-radius: 10px;
+  border: 1px solid var(--console-border);
+  background: #090e14;
+}
+
 @media (max-width: 760px) {
   .dashboard-header {
     padding: 0.9rem 1rem;
@@ -403,6 +442,16 @@
   }
 
   .record-btn {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .video-record-controls {
+    width: 100%;
+  }
+
+  .video-record-controls .record-btn,
+  .video-record-controls .assistant-btn {
     width: 100%;
     max-width: 320px;
   }
