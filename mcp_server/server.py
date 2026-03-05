@@ -11,7 +11,7 @@ API_BASE_URL = os.getenv("MCP_API_BASE_URL", "http://localhost:8000").rstrip("/"
 API_TOKEN = os.getenv("MCP_API_TOKEN")
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("MCP_REQUEST_TIMEOUT_SECONDS", "20"))
 
-mcp = FastMCP("audio-intelligence-mcp")
+mcp = FastMCP("media-intelligence-mcp")
 
 INJECTION_MARKERS = (
     "ignore previous instructions",
@@ -70,8 +70,8 @@ def _request(
 @mcp.tool()
 def list_recordings(user_id: int, token: str | None = None) -> dict[str, Any]:
     """
-    Return authenticated user's recordings.
-    Input is structured by user_id; authorization is enforced via JWT token.
+    Return authenticated user's audio recordings.
+    Input is structured by user_id; ownership is JWT-enforced by backend.
     """
     recordings = _request("GET", "/recordings", token=token)
     return {
@@ -83,7 +83,7 @@ def list_recordings(user_id: int, token: str | None = None) -> dict[str, Any]:
 
 @mcp.tool()
 def get_recording_metadata(recording_id: int, token: str | None = None) -> dict[str, Any]:
-    """Get metadata for one recording owned by authenticated user."""
+    """Get metadata for one audio recording owned by authenticated user."""
     recording = _request("GET", f"/recordings/{recording_id}", token=token)
     return {
         "recording_id": recording["id"],
@@ -96,7 +96,7 @@ def get_recording_metadata(recording_id: int, token: str | None = None) -> dict[
 
 @mcp.tool()
 def transcribe_audio(recording_id: int, token: str | None = None) -> dict[str, Any]:
-    """Transcribe a recording and return transcript."""
+    """Transcribe an audio recording and return transcript."""
     payload = _request("POST", f"/recordings/{recording_id}/transcribe", token=token)
     return {
         "recording_id": payload["recording_id"],
@@ -107,7 +107,7 @@ def transcribe_audio(recording_id: int, token: str | None = None) -> dict[str, A
 
 @mcp.tool()
 def summarize_audio(recording_id: int, token: str | None = None) -> dict[str, Any]:
-    """Summarize a recording transcript."""
+    """Summarize an audio recording transcript."""
     payload = _request("POST", f"/recordings/{recording_id}/summarize", token=token)
     return {
         "recording_id": payload["recording_id"],
@@ -117,7 +117,7 @@ def summarize_audio(recording_id: int, token: str | None = None) -> dict[str, An
 
 @mcp.tool()
 def search_recordings(query: str, limit: int = 5, token: str | None = None) -> dict[str, Any]:
-    """Semantic search over transcripts with prompt-injection checks."""
+    """Semantic search over audio transcripts with prompt-injection checks."""
     safe_query = _ensure_safe_text(query)
     payload = _request(
         "POST",
@@ -130,9 +130,11 @@ def search_recordings(query: str, limit: int = 5, token: str | None = None) -> d
 
 @mcp.tool()
 def answer_question_about_recordings(
-    question: str, limit: int = 5, token: str | None = None
+    question: str,
+    limit: int = 5,
+    token: str | None = None,
 ) -> dict[str, Any]:
-    """Answer question using transcript search and grounded generation."""
+    """Answer question using audio transcript search and grounded generation."""
     safe_question = _ensure_safe_text(question)
     payload = _request(
         "POST",
@@ -143,6 +145,83 @@ def answer_question_about_recordings(
     return payload
 
 
+@mcp.tool()
+def list_videos(user_id: int, token: str | None = None) -> dict[str, Any]:
+    """
+    Return authenticated user's video recordings.
+    Input is structured by user_id; ownership is JWT-enforced by backend.
+    """
+    videos = _request("GET", "/videos", token=token)
+    return {
+        "user_id": user_id,
+        "count": len(videos),
+        "videos": videos,
+    }
+
+
+@mcp.tool()
+def get_video_metadata(video_id: int, token: str | None = None) -> dict[str, Any]:
+    """Get metadata for one video recording owned by authenticated user."""
+    video = _request("GET", f"/videos/{video_id}", token=token)
+    return {
+        "video_id": video["id"],
+        "filename": video["filename"],
+        "duration": video.get("duration"),
+        "size": video.get("file_size"),
+        "created_at": video.get("created_at"),
+    }
+
+
+@mcp.tool()
+def transcribe_video(video_id: int, token: str | None = None) -> dict[str, Any]:
+    """Extract audio, transcribe video speech, and return transcript."""
+    payload = _request("POST", f"/videos/{video_id}/transcribe", token=token)
+    return {
+        "video_id": payload["video_id"],
+        "transcript": payload["transcript"],
+        "transcript_preview": payload["transcript_preview"],
+    }
+
+
+@mcp.tool()
+def summarize_video(video_id: int, token: str | None = None) -> dict[str, Any]:
+    """Summarize a video transcript."""
+    payload = _request("POST", f"/videos/{video_id}/summarize", token=token)
+    return {
+        "video_id": payload["video_id"],
+        "summary": payload["summary"],
+    }
+
+
+@mcp.tool()
+def search_videos(query: str, limit: int = 5, token: str | None = None) -> dict[str, Any]:
+    """Semantic search over video transcripts with prompt-injection checks."""
+    safe_query = _ensure_safe_text(query)
+    payload = _request(
+        "POST",
+        "/videos/search",
+        token=token,
+        json_payload={"query": safe_query, "limit": max(1, min(limit, 25))},
+    )
+    return payload
+
+
+@mcp.tool()
+def answer_question_about_videos(
+    question: str,
+    limit: int = 5,
+    token: str | None = None,
+) -> dict[str, Any]:
+    """Answer question using video transcript search and grounded generation."""
+    safe_question = _ensure_safe_text(question)
+    payload = _request(
+        "POST",
+        "/videos/answer",
+        token=token,
+        json_payload={"question": safe_question, "limit": max(1, min(limit, 10))},
+    )
+    return payload
+
+
 if __name__ == "__main__":
     mcp.run()
-
