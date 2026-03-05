@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { apiService, RecordingListItem } from '../services/api';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { apiService, RecordingListItem, VideoListItem } from '../services/api';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
+import { useVideoRecorder } from '../hooks/useVideoRecorder';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -9,12 +10,22 @@ interface DashboardProps {
 
 export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   const [recordings, setRecordings] = useState<RecordingListItem[]>([]);
+  const [videos, setVideos] = useState<VideoListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentlyPlaying, setCurrentlyPlaying] = useState<number | null>(null);
+
+  const [currentlyPlayingAudio, setCurrentlyPlayingAudio] = useState<number | null>(null);
+  const [currentlyPlayingVideo, setCurrentlyPlayingVideo] = useState<number | null>(null);
+  const [currentlyPlayingVideoUrl, setCurrentlyPlayingVideoUrl] = useState<string | null>(null);
+
   const [recordingName, setRecordingName] = useState('');
+  const [videoName, setVideoName] = useState('');
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [videoSearchQuery, setVideoSearchQuery] = useState('');
+
   const [assistantQuery, setAssistantQuery] = useState('');
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState<string | null>(null);
@@ -22,18 +33,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     Array<{ query: string; answer: string; steps: Array<{ step: string; tool: string; output_preview: string }> }>
   >([]);
 
+  const [pendingVideoBlob, setPendingVideoBlob] = useState<Blob | null>(null);
+  const [pendingVideoPreviewUrl, setPendingVideoPreviewUrl] = useState<string | null>(null);
+
   const {
     isRecording,
     recordingTime,
     startRecording,
     stopRecording,
-    error: recorderError
+    error: recorderError,
   } = useAudioRecorder();
 
+  const {
+    isRecording: isVideoRecording,
+    recordingTime: videoRecordingTime,
+    previewStream,
+    startRecording: startVideoRecording,
+    stopRecording: stopVideoRecording,
+    error: videoRecorderError,
+  } = useVideoRecorder();
+
+  const liveVideoPreviewRef = useRef<HTMLVideoElement | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
+  const currentVideoUrlRef = useRef<string | null>(null);
 
-  const stopCurrentPlayback = useCallback((updateState = true) => {
+  const stopCurrentAudioPlayback = useCallback((updateState = true) => {
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current.onended = null;
@@ -44,32 +69,100 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
       currentAudioUrlRef.current = null;
     }
     if (updateState) {
-      setCurrentlyPlaying(null);
+      setCurrentlyPlayingAudio(null);
     }
   }, []);
 
-  const fetchRecordings = async () => {
+  const stopCurrentVideoPlayback = useCallback((updateState = true) => {
+    if (currentVideoUrlRef.current) {
+      URL.revokeObjectURL(currentVideoUrlRef.current);
+      currentVideoUrlRef.current = null;
+    }
+    if (updateState) {
+      setCurrentlyPlayingVideo(null);
+      setCurrentlyPlayingVideoUrl(null);
+    }
+  }, []);
+
+  const fetchMediaLibrary = async () => {
     try {
-      const data = await apiService.getRecordings();
-      setRecordings(data);
+      const [audioData, videoData] = await Promise.all([
+        apiService.getRecordings(),
+        apiService.getVideos(),
+      ]);
+      setRecordings(audioData);
+      setVideos(videoData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch recordings');
+      setError(err instanceof Error ? err.message : 'Failed to fetch media library');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRecordings();
+    fetchMediaLibrary();
   }, []);
 
   useEffect(() => {
     return () => {
-      stopCurrentPlayback(false);
+      stopCurrentAudioPlayback(false);
+      stopCurrentVideoPlayback(false);
     };
-  }, [stopCurrentPlayback]);
+  }, [stopCurrentAudioPlayback, stopCurrentVideoPlayback]);
 
-  const handleRecord = async () => {
+  useEffect(() => {
+    if (!liveVideoPreviewRef.current) {
+      return;
+    }
+
+    liveVideoPreviewRef.current.srcObject = previewStream;
+  }, [previewStream]);
+
+  useEffect(() => {
+    if (!pendingVideoBlob) {
+      setPendingVideoPreviewUrl(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(pendingVideoBlob);
+    setPendingVideoPreviewUrl(url);
+
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [pendingVideoBlob]);
+
+  const buildFilename = (name: string, defaultPrefix: string, extension: string): string => {
+    const fallback = `${defaultPrefix}_${Date.now()}`;
+    const trimmed = name.trim();
+    const base = trimmed.length > 0 ? trimmed : fallback;
+    const sanitized = base
+      .replace(/[<>:"/\\|?*]/g, '')
+      .replace(/[\r\n\t]/g, ' ')
+      .replace(/\s+/g, '_')
+      .slice(0, 80);
+    const safeBase = sanitized || fallback;
+    return safeBase.toLowerCase().endsWith(extension) ? safeBase : `${safeBase}${extension}`;
+  };
+
+  const uploadRecording = async (blob: Blob, customName: string) => {
+    setUploadingAudio(true);
+    setError(null);
+
+    try {
+      const filename = buildFilename(customName, 'recording', '.webm');
+      const file = new File([blob], filename, { type: 'audio/webm' });
+      await apiService.uploadRecording(file, recordingTime);
+      setRecordingName('');
+      await fetchMediaLibrary();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload recording');
+    } finally {
+      setUploadingAudio(false);
+    }
+  };
+
+  const handleAudioRecord = async () => {
     if (isRecording) {
       const nameAtStop = recordingName;
       const blob = await stopRecording();
@@ -81,78 +174,123 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     }
   };
 
-  const buildRecordingFilename = (name: string): string => {
-    const fallback = `recording_${Date.now()}`;
-    const trimmed = name.trim();
-    const base = trimmed.length > 0 ? trimmed : fallback;
-    const sanitized = base
-      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
-      .replace(/\s+/g, '_')
-      .slice(0, 80);
-    const safeBase = sanitized || fallback;
-    return safeBase.toLowerCase().endsWith('.webm') ? safeBase : `${safeBase}.webm`;
+  const handleStartVideo = async () => {
+    setPendingVideoBlob(null);
+    setError(null);
+    await startVideoRecording();
   };
 
-  const uploadRecording = async (blob: Blob, customName: string) => {
-    setUploading(true);
-    setError(null);
-
-    try {
-      const filename = buildRecordingFilename(customName);
-      const file = new File([blob], filename, { type: 'audio/webm' });
-
-      await apiService.uploadRecording(file, recordingTime);
-      setRecordingName('');
-      await fetchRecordings();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload recording');
-    } finally {
-      setUploading(false);
+  const handleStopVideo = async () => {
+    const blob = await stopVideoRecording();
+    if (blob) {
+      setPendingVideoBlob(blob);
     }
   };
 
-  const handlePlay = async (recording: RecordingListItem) => {
-    if (currentlyPlaying === recording.id) {
-      stopCurrentPlayback();
+  const handleUploadVideo = async () => {
+    if (!pendingVideoBlob) {
+      return;
+    }
+
+    setUploadingVideo(true);
+    setError(null);
+
+    try {
+      const filename = buildFilename(videoName, 'video', '.webm');
+      const fileType = pendingVideoBlob.type || 'video/webm';
+      const file = new File([pendingVideoBlob], filename, { type: fileType });
+      await apiService.uploadVideo(file, videoRecordingTime || undefined);
+      setVideoName('');
+      setPendingVideoBlob(null);
+      await fetchMediaLibrary();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload video');
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
+  const handlePlayAudio = async (recording: RecordingListItem) => {
+    if (currentlyPlayingAudio === recording.id) {
+      stopCurrentAudioPlayback();
       return;
     }
 
     setError(null);
-    stopCurrentPlayback();
+    stopCurrentAudioPlayback();
 
     try {
       const audioUrl = await apiService.getRecordingAudioUrl(recording.id);
       const audio = new Audio(audioUrl);
       audio.onended = () => {
-        stopCurrentPlayback();
+        stopCurrentAudioPlayback();
       };
       await audio.play();
       currentAudioRef.current = audio;
       currentAudioUrlRef.current = audioUrl;
-      setCurrentlyPlaying(recording.id);
+      setCurrentlyPlayingAudio(recording.id);
     } catch (err) {
-      stopCurrentPlayback();
+      stopCurrentAudioPlayback();
       setError(err instanceof Error ? err.message : 'Failed to play recording');
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handlePlayVideo = async (video: VideoListItem) => {
+    if (currentlyPlayingVideo === video.id) {
+      stopCurrentVideoPlayback();
+      return;
+    }
+
+    setError(null);
+    stopCurrentVideoPlayback();
+
+    try {
+      const videoUrl = await apiService.getVideoStreamUrl(video.id);
+      currentVideoUrlRef.current = videoUrl;
+      setCurrentlyPlayingVideo(video.id);
+      setCurrentlyPlayingVideoUrl(videoUrl);
+    } catch (err) {
+      stopCurrentVideoPlayback();
+      setError(err instanceof Error ? err.message : 'Failed to play video');
+    }
+  };
+
+  const handleDeleteAudio = async (id: number) => {
     if (!window.confirm('Are you sure you want to delete this recording?')) {
       return;
     }
 
     try {
       await apiService.deleteRecording(id);
-      await fetchRecordings();
+      if (currentlyPlayingAudio === id) {
+        stopCurrentAudioPlayback();
+      }
+      await fetchMediaLibrary();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete recording');
     }
   };
 
+  const handleDeleteVideo = async (id: number) => {
+    if (!window.confirm('Are you sure you want to delete this video?')) {
+      return;
+    }
+
+    try {
+      await apiService.deleteVideo(id);
+      if (currentlyPlayingVideo === id) {
+        stopCurrentVideoPlayback();
+      }
+      await fetchMediaLibrary();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete video');
+    }
+  };
+
   const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const formatDuration = (seconds: number | null): string => {
@@ -166,12 +304,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
     return new Date(dateString).toLocaleString();
   };
 
-  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
-  const filteredRecordings = normalizedSearchQuery
-    ? recordings.filter((recording) =>
-        recording.filename.toLowerCase().includes(normalizedSearchQuery)
-      )
+  const normalizedAudioSearch = searchQuery.trim().toLowerCase();
+  const filteredRecordings = normalizedAudioSearch
+    ? recordings.filter((recording) => recording.filename.toLowerCase().includes(normalizedAudioSearch))
     : recordings;
+
+  const normalizedVideoSearch = videoSearchQuery.trim().toLowerCase();
+  const filteredVideos = normalizedVideoSearch
+    ? videos.filter((video) => video.filename.toLowerCase().includes(normalizedVideoSearch))
+    : videos;
 
   const handleAskAssistant = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,61 +348,93 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h1>Audio Recorder</h1>
+        <h1>Media Recorder</h1>
         <button onClick={onLogout} className="logout-btn">Logout</button>
       </header>
 
       <div className="recorder-section">
+        <h2>Audio Recording</h2>
         <input
           type="text"
           className="recording-name-input"
-          placeholder="Recording name (optional)"
+          placeholder="Audio filename (optional)"
           value={recordingName}
           onChange={(e) => setRecordingName(e.target.value)}
-          disabled={isRecording || uploading}
+          disabled={isRecording || uploadingAudio}
           maxLength={80}
         />
         <button
           className={`record-btn ${isRecording ? 'recording' : ''}`}
-          onClick={handleRecord}
-          disabled={uploading}
+          onClick={handleAudioRecord}
+          disabled={uploadingAudio}
         >
-          {isRecording ? 'Stop Recording' : 'Start Recording'}
+          {isRecording ? 'Stop Audio Recording' : 'Start Audio Recording'}
         </button>
         <div className="recording-name-hint">
-          Leave blank to use an automatic filename.
+          Audio recording uploads automatically when you stop.
         </div>
-        {isRecording && (
-          <div className="recording-time">
-            {formatDuration(recordingTime)}
-          </div>
+        {isRecording && <div className="recording-time">{formatDuration(recordingTime)}</div>}
+      </div>
+
+      <div className="recorder-section video-recorder-section">
+        <h2>Video Recording</h2>
+        <input
+          type="text"
+          className="recording-name-input"
+          placeholder="Video filename (optional)"
+          value={videoName}
+          onChange={(e) => setVideoName(e.target.value)}
+          disabled={isVideoRecording || uploadingVideo}
+          maxLength={80}
+        />
+
+        <div className="video-record-controls">
+          <button className="record-btn" onClick={handleStartVideo} disabled={isVideoRecording || uploadingVideo}>
+            Start Recording
+          </button>
+          <button className="record-btn recording" onClick={handleStopVideo} disabled={!isVideoRecording}>
+            Stop Recording
+          </button>
+          <button className="assistant-btn" onClick={handleUploadVideo} disabled={!pendingVideoBlob || isVideoRecording || uploadingVideo}>
+            {uploadingVideo ? 'Uploading...' : 'Upload'}
+          </button>
+        </div>
+
+        {isVideoRecording && <div className="recording-time">{formatDuration(videoRecordingTime)}</div>}
+
+        {isVideoRecording && (
+          <video ref={liveVideoPreviewRef} className="video-preview" autoPlay muted playsInline />
         )}
-        {(uploading || loading) && (
-          <div className="loading">{uploading ? 'Uploading...' : 'Loading...'}</div>
-        )}
-        {(error || recorderError) && (
-          <div className="error-message">{error || recorderError}</div>
+
+        {!isVideoRecording && pendingVideoPreviewUrl && (
+          <video className="video-preview" controls src={pendingVideoPreviewUrl} />
         )}
       </div>
 
+      {(uploadingAudio || loading) && (
+        <div className="loading">{uploadingAudio ? 'Uploading audio...' : 'Loading media...'}</div>
+      )}
+      {(error || recorderError || videoRecorderError) && (
+        <div className="error-message">{error || recorderError || videoRecorderError}</div>
+      )}
+
       <div className="recordings-section">
-        <h2>Your Recordings</h2>
+        <h2>Your Audio Recordings</h2>
         <div className="recordings-toolbar">
           <input
             type="search"
             className="search-input"
-            placeholder="Search recordings by name..."
+            placeholder="Search audio by filename..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <span className="search-count">
-            {filteredRecordings.length} / {recordings.length}
-          </span>
+          <span className="search-count">{filteredRecordings.length} / {recordings.length}</span>
         </div>
+
         {recordings.length === 0 && !loading ? (
-          <p className="no-recordings">No recordings yet. Click "Start Recording" to begin.</p>
+          <p className="no-recordings">No audio recordings yet.</p>
         ) : filteredRecordings.length === 0 ? (
-          <p className="no-recordings">No recordings match your search.</p>
+          <p className="no-recordings">No audio recordings match your search.</p>
         ) : (
           <div className="recordings-list">
             {filteredRecordings.map((recording) => (
@@ -274,18 +447,64 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
                 </div>
                 <div className="recording-actions">
                   <button
-                    className={`play-btn ${currentlyPlaying === recording.id ? 'playing' : ''}`}
-                    onClick={() => handlePlay(recording)}
+                    className={`play-btn ${currentlyPlayingAudio === recording.id ? 'playing' : ''}`}
+                    onClick={() => handlePlayAudio(recording)}
                   >
-                    {currentlyPlaying === recording.id ? 'Pause' : 'Play'}
+                    {currentlyPlayingAudio === recording.id ? 'Pause' : 'Play'}
                   </button>
-                  <button
-                    className="delete-btn"
-                    onClick={() => handleDelete(recording.id)}
-                  >
+                  <button className="delete-btn" onClick={() => handleDeleteAudio(recording.id)}>
                     Delete
                   </button>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="recordings-section">
+        <h2>Your Videos</h2>
+        <div className="recordings-toolbar">
+          <input
+            type="search"
+            className="search-input"
+            placeholder="Search videos by filename..."
+            value={videoSearchQuery}
+            onChange={(e) => setVideoSearchQuery(e.target.value)}
+          />
+          <span className="search-count">{filteredVideos.length} / {videos.length}</span>
+        </div>
+
+        {videos.length === 0 && !loading ? (
+          <p className="no-recordings">No videos yet.</p>
+        ) : filteredVideos.length === 0 ? (
+          <p className="no-recordings">No videos match your search.</p>
+        ) : (
+          <div className="recordings-list">
+            {filteredVideos.map((video) => (
+              <div key={video.id} className="recording-item video-item">
+                <div className="recording-info">
+                  <span className="filename">{video.filename}</span>
+                  <span className="metadata">
+                    {formatDate(video.created_at)} | {formatFileSize(video.file_size)} | {formatDuration(video.duration)}
+                  </span>
+                  {video.summary && <span className="metadata">Summary: {video.summary}</span>}
+                </div>
+                <div className="recording-actions">
+                  <button
+                    className={`play-btn ${currentlyPlayingVideo === video.id ? 'playing' : ''}`}
+                    onClick={() => handlePlayVideo(video)}
+                  >
+                    {currentlyPlayingVideo === video.id ? 'Hide' : 'Play'}
+                  </button>
+                  <button className="delete-btn" onClick={() => handleDeleteVideo(video.id)}>
+                    Delete
+                  </button>
+                </div>
+
+                {currentlyPlayingVideo === video.id && currentlyPlayingVideoUrl && (
+                  <video className="video-player" controls autoPlay src={currentlyPlayingVideoUrl} />
+                )}
               </div>
             ))}
           </div>
@@ -298,7 +517,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
           <input
             type="text"
             className="assistant-input"
-            placeholder="Ask about your recordings..."
+            placeholder="Ask about your audio and video recordings..."
             value={assistantQuery}
             onChange={(e) => setAssistantQuery(e.target.value)}
             disabled={assistantLoading}
@@ -307,6 +526,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onLogout }) => {
             {assistantLoading ? 'Thinking...' : 'Ask'}
           </button>
         </form>
+
         {assistantError && <div className="error-message">{assistantError}</div>}
         {assistantHistory.length === 0 ? (
           <p className="no-recordings">No assistant queries yet.</p>
