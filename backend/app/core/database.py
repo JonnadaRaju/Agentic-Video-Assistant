@@ -34,29 +34,59 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
     # Lightweight forward-compatible schema patch for existing deployments
-    # that were created before AI columns were introduced.
+    # that were created before AI/video columns were introduced.
     if settings.DATABASE_URL.startswith("postgresql"):
+        vector_type_available = False
+
         async with engine.begin() as conn:
             try:
-                await conn.execute(
-                    text(
-                        "ALTER TABLE audio_recordings "
-                        "ADD COLUMN IF NOT EXISTS transcript TEXT"
-                    )
+                result = await conn.execute(
+                    text("SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector')")
                 )
-                await conn.execute(
-                    text(
-                        "ALTER TABLE audio_recordings "
-                        "ADD COLUMN IF NOT EXISTS transcript_embedding VECTOR(1536)"
-                    )
-                )
-            except Exception:
+                vector_type_available = bool(result.scalar())
+            except Exception as exc:
+                logger.warning("Could not detect vector type availability: %s", exc)
+
+        # Run each DDL statement in its own transaction to avoid a failed ALTER
+        # leaving the transaction in an aborted state and rolling back prior steps.
+        schema_patch_statements = [
+            "ALTER TABLE audio_recordings ADD COLUMN IF NOT EXISTS transcript TEXT",
+            "ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS transcript TEXT",
+            "ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS summary TEXT",
+        ]
+
+        embedding_column_type = "VECTOR(1536)" if vector_type_available else "JSONB"
+        schema_patch_statements.extend(
+            [
+                f"ALTER TABLE audio_recordings ADD COLUMN IF NOT EXISTS transcript_embedding {embedding_column_type}",
+                f"ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS transcript_embedding {embedding_column_type}",
+            ]
+        )
+
+        for statement in schema_patch_statements:
+            async with engine.begin() as conn:
                 try:
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE audio_recordings "
-                            "ADD COLUMN IF NOT EXISTS transcript_embedding JSONB"
-                        )
-                    )
+                    await conn.execute(text(statement))
                 except Exception as exc:
-                    logger.warning("Could not patch AI columns on startup: %s", exc)
+                    logger.warning("Could not apply schema patch (%s): %s", statement, exc)
+
+        if vector_type_available:
+            vector_index_statements = [
+                (
+                    "CREATE INDEX IF NOT EXISTS idx_audio_recordings_transcript_embedding "
+                    "ON audio_recordings USING ivfflat (transcript_embedding vector_cosine_ops) "
+                    "WITH (lists = 100)"
+                ),
+                (
+                    "CREATE INDEX IF NOT EXISTS idx_video_recordings_transcript_embedding "
+                    "ON video_recordings USING ivfflat (transcript_embedding vector_cosine_ops) "
+                    "WITH (lists = 100)"
+                ),
+            ]
+
+            for statement in vector_index_statements:
+                async with engine.begin() as conn:
+                    try:
+                        await conn.execute(text(statement))
+                    except Exception as exc:
+                        logger.warning("Could not apply vector index patch (%s): %s", statement, exc)
