@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
+import shutil
 import subprocess
 import uuid
+import base64
 from pathlib import Path
 from typing import Literal
 
@@ -67,16 +70,27 @@ def _provider_headers(kind: ProviderKind, include_json: bool = False) -> dict[st
 
 
 def _groq_config() -> tuple[str, str, str]:
-    api_key = settings.GROQ_API_KEY or settings.CHAT_API_KEY or settings.OPENAI_API_KEY
+    api_key = (
+        settings.OPENROUTER_API_KEY
+        or settings.GROQ_API_KEY
+        or settings.CHAT_API_KEY
+        or settings.OPENAI_API_KEY
+    )
     base_url = (
-        settings.GROQ_BASE_URL
+        settings.OPENROUTER_BASE_URL
+        or settings.GROQ_BASE_URL
         or settings.CHAT_BASE_URL
         or settings.OPENAI_BASE_URL
     )
-    model = settings.GROQ_MODEL or settings.CHAT_MODEL or settings.OPENAI_CHAT_MODEL
+    model = (
+        settings.OPENROUTER_MODEL
+        or settings.GROQ_MODEL
+        or settings.CHAT_MODEL
+        or settings.OPENAI_CHAT_MODEL
+    )
     if not api_key:
         raise AIServiceError(
-            "GROQ_API_KEY (or CHAT_API_KEY / OPENAI_API_KEY fallback) is not configured."
+            "OPENROUTER_API_KEY/GROQ_API_KEY (or CHAT_API_KEY / OPENAI_API_KEY fallback) is not configured."
         )
     return api_key, base_url.rstrip("/"), model
 
@@ -87,16 +101,8 @@ def _groq_headers(include_json: bool = False) -> dict[str, str]:
 
 
 def _sarvam_config() -> tuple[str, str, str, str]:
-    api_key = (
-        settings.SARVAM_API_KEY
-        or settings.TRANSCRIPTION_API_KEY
-        or settings.OPENAI_API_KEY
-    )
-    base_url = (
-        settings.SARVAM_BASE_URL
-        or settings.TRANSCRIPTION_BASE_URL
-        or settings.OPENAI_BASE_URL
-    )
+    api_key = settings.SARVAM_API_KEY
+    base_url = settings.SARVAM_BASE_URL
     model = (
         settings.SARVAM_TRANSCRIPTION_MODEL
         or settings.TRANSCRIPTION_MODEL
@@ -104,9 +110,9 @@ def _sarvam_config() -> tuple[str, str, str, str]:
     )
     endpoint = settings.SARVAM_TRANSCRIPTION_ENDPOINT or "/audio/transcriptions"
 
-    if not api_key:
+    if not api_key or not base_url:
         raise AIServiceError(
-            "SARVAM_API_KEY (or TRANSCRIPTION_API_KEY / OPENAI_API_KEY fallback) is not configured."
+            "SARVAM_API_KEY and SARVAM_BASE_URL must both be configured for Sarvam transcription."
         )
     return api_key, base_url.rstrip("/"), model, endpoint
 
@@ -149,32 +155,182 @@ def _guess_mime_type(file_path: Path, fallback: str) -> str:
     return guessed or fallback
 
 
+def _normalize_openrouter_model(model: str, base_url: str) -> str:
+    if "openrouter.ai" in base_url and "/" not in model:
+        return f"openai/{model}"
+    return model
+
+
+def _openrouter_audio_model_candidates(chat_model: str) -> list[str]:
+    candidates = [
+        (settings.OPENROUTER_AUDIO_INPUT_MODEL or "").strip(),
+        chat_model.strip(),
+        "openai/gpt-audio-mini",
+        "openai/gpt-4o-mini",
+    ]
+    unique: list[str] = []
+    seen: set[str] = set()
+    for item in candidates:
+        if not item:
+            continue
+        normalized = item.strip()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        unique.append(normalized)
+    return unique
+
+
+def _audio_format_from_path(path: Path) -> str:
+    suffix = path.suffix.lower().lstrip(".")
+    if suffix in {"mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm", "ogg"}:
+        return suffix
+    return "wav"
+
+
+def _transcribe_via_chat_audio_input(path: Path, model_override: str | None = None) -> str:
+    file_bytes = path.read_bytes()
+    if not file_bytes:
+        raise AIServiceError("Audio file is empty and cannot be transcribed.")
+
+    encoded_audio = base64.b64encode(file_bytes).decode("ascii")
+    _, chat_base_url, chat_model = _provider_config("chat")
+    selected_model = (model_override or chat_model).strip()
+    resolved_model = _normalize_openrouter_model(selected_model, chat_base_url)
+    transcript = _chat_completion(
+        base_url=chat_base_url,
+        model=resolved_model,
+        headers=_provider_headers("chat", include_json=True),
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You transcribe audio. Return only the transcript text. "
+                    "Do not add summaries, labels, or commentary."
+                ),
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Transcribe this audio exactly.",
+                    },
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": encoded_audio,
+                            "format": _audio_format_from_path(path),
+                        },
+                    },
+                ],
+            },
+        ],
+        timeout=180,
+    )
+
+    sanitized = sanitize_user_text(transcript)
+    if not sanitized:
+        raise AIServiceError("Transcription returned empty text.")
+    return sanitized
+
+
+def _transcribe_with_openai_audio_endpoint(path: Path, mime_type: str) -> str:
+    if not settings.OPENAI_API_KEY:
+        raise AIServiceError("OPENAI_API_KEY is not configured.")
+
+    openai_base_url = settings.OPENAI_BASE_URL.rstrip("/")
+    model = settings.OPENAI_TRANSCRIPTION_MODEL
+    if "/" in model:
+        model = model.split("/", 1)[1]
+
+    try:
+        with path.open("rb") as audio_file:
+            response = requests.post(
+                f"{openai_base_url}/audio/transcriptions",
+                headers=_base_headers(settings.OPENAI_API_KEY, openai_base_url),
+                data={"model": model},
+                files={"file": (path.name, audio_file, mime_type)},
+                timeout=180,
+            )
+    except requests.RequestException as exc:
+        raise AIServiceError(f"OpenAI transcription request failed: {exc}") from exc
+
+    if not response.ok:
+        raise AIServiceError(
+            f"OpenAI transcription failed: {response.status_code} {response.text[:200]}"
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise AIServiceError("OpenAI transcription response was not valid JSON.") from exc
+
+    return _extract_transcript_text(payload)
+
+
+def _resolve_ffmpeg_binary() -> str | None:
+    configured = (settings.FFMPEG_BINARY or "").strip()
+    candidates = [configured] if configured else []
+    candidates.extend(["ffmpeg", "ffmpeg.exe"])
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate_path = Path(candidate)
+        if candidate_path.is_file():
+            return str(candidate_path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        windows_apps_binary = Path(local_app_data) / "Microsoft" / "WindowsApps" / "ffmpeg.exe"
+        if windows_apps_binary.is_file():
+            return str(windows_apps_binary)
+
+        winget_root = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
+        if winget_root.exists():
+            for match in winget_root.glob("Gyan.FFmpeg_*/*/bin/ffmpeg.exe"):
+                if match.is_file():
+                    return str(match)
+
+    return None
+
+
 def _chat_completion(
     *,
     base_url: str,
     model: str,
     headers: dict[str, str],
-    messages: list[dict[str, str]],
+    messages: list[dict[str, object]],
     timeout: int = 60,
 ) -> str:
-    response = requests.post(
-        f"{base_url}/chat/completions",
-        headers=headers,
-        data=json.dumps(
-            {
-                "model": model,
-                "temperature": 0.2,
-                "messages": messages,
-            }
-        ),
-        timeout=timeout,
-    )
+    try:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            data=json.dumps(
+                {
+                    "model": model,
+                    "temperature": 0.2,
+                    "messages": messages,
+                }
+            ),
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:
+        raise AIServiceError(f"Chat completion request failed: {exc}") from exc
     if not response.ok:
         raise AIServiceError(
             f"Chat completion failed: {response.status_code} {response.text[:200]}"
         )
-    payload = response.json()
-    return payload["choices"][0]["message"]["content"].strip()
+    try:
+        payload = response.json()
+        return payload["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise AIServiceError("Chat completion response format was invalid.") from exc
 
 
 async def _db_uses_vector_column(
@@ -255,23 +411,59 @@ def transcribe_file(file_path: str, mime_type: str | None = None) -> str:
         raise AIServiceError("Recording file was not found on disk.")
 
     _, base_url, model = _provider_config("transcription")
+    model = _normalize_openrouter_model(model, base_url)
     resolved_mime = mime_type or _guess_mime_type(path, "application/octet-stream")
 
-    with path.open("rb") as audio_file:
-        response = requests.post(
-            f"{base_url}/audio/transcriptions",
-            headers=_provider_headers("transcription"),
-            data={"model": model},
-            files={"file": (path.name, audio_file, resolved_mime)},
-            timeout=180,
-        )
+    try:
+        with path.open("rb") as audio_file:
+            response = requests.post(
+                f"{base_url}/audio/transcriptions",
+                headers=_provider_headers("transcription"),
+                data={"model": model},
+                files={"file": (path.name, audio_file, resolved_mime)},
+                timeout=180,
+            )
+    except requests.RequestException as exc:
+        raise AIServiceError(f"Transcription request failed: {exc}") from exc
+
+    if response.status_code in {404, 405} and "openrouter.ai" in base_url:
+        # OpenRouter does not expose /audio/transcriptions in its public OpenAPI.
+        # Fallback to audio input via chat/completions for compatibility.
+        try:
+            return _transcribe_via_chat_audio_input(path)
+        except AIServiceError as exc:
+            message = str(exc).lower()
+            if "input audio" in message:
+                _, chat_base_url, chat_model = _provider_config("chat")
+                if "openrouter.ai" in chat_base_url:
+                    last_error: Exception = exc
+                    try:
+                        for candidate in _openrouter_audio_model_candidates(chat_model):
+                            try:
+                                return _transcribe_via_chat_audio_input(path, model_override=candidate)
+                            except AIServiceError as candidate_exc:
+                                last_error = candidate_exc
+                        raise last_error
+                    except AIServiceError as fallback_exc:
+                        exc = fallback_exc
+                        message = str(fallback_exc).lower()
+            if "input audio" in message and settings.OPENAI_API_KEY:
+                return _transcribe_with_openai_audio_endpoint(path, resolved_mime)
+            raise AIServiceError(
+                "Transcription provider does not support audio input for configured model(s). "
+                "Set OPENROUTER_AUDIO_INPUT_MODEL to an audio-capable OpenRouter model "
+                "(for example openai/gpt-audio-mini), or configure OPENAI_API_KEY."
+            ) from exc
 
     if not response.ok:
         raise AIServiceError(
             f"Transcription failed: {response.status_code} {response.text[:200]}"
         )
 
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise AIServiceError("Transcription response was not valid JSON.") from exc
     return _extract_transcript_text(payload)
 
 
@@ -288,21 +480,27 @@ def transcribe_file_with_sarvam(file_path: str, mime_type: str | None = None) ->
     # Some Sarvam deployments use API subscription headers instead of OAuth-style auth.
     headers["api-subscription-key"] = api_key
 
-    with path.open("rb") as audio_file:
-        response = requests.post(
-            f"{base_url}{endpoint_path}",
-            headers=headers,
-            data={"model": model},
-            files={"file": (path.name, audio_file, resolved_mime)},
-            timeout=180,
-        )
+    try:
+        with path.open("rb") as audio_file:
+            response = requests.post(
+                f"{base_url}{endpoint_path}",
+                headers=headers,
+                data={"model": model},
+                files={"file": (path.name, audio_file, resolved_mime)},
+                timeout=180,
+            )
+    except requests.RequestException as exc:
+        raise AIServiceError(f"Sarvam transcription request failed: {exc}") from exc
 
     if not response.ok:
         raise AIServiceError(
             f"Sarvam transcription failed: {response.status_code} {response.text[:200]}"
         )
 
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise AIServiceError("Sarvam transcription response was not valid JSON.") from exc
     return _extract_transcript_text(payload)
 
 
@@ -311,12 +509,18 @@ def extract_audio_from_video(video_path: str) -> str:
     if not source.exists():
         raise AIServiceError("Video file was not found on disk.")
 
+    ffmpeg_binary = _resolve_ffmpeg_binary()
+    if not ffmpeg_binary:
+        raise AIServiceError(
+            "FFmpeg was not found. Set FFMPEG_BINARY in backend/.env to an absolute ffmpeg executable path."
+        )
+
     output_dir = Path(settings.EXTRACTED_AUDIO_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{uuid.uuid4()}.wav"
 
     cmd = [
-        settings.FFMPEG_BINARY,
+        ffmpeg_binary,
         "-y",
         "-i",
         str(source),
@@ -330,12 +534,17 @@ def extract_audio_from_video(video_path: str) -> str:
         str(output_path),
     ]
 
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise AIServiceError(
+            f"FFmpeg binary '{ffmpeg_binary}' was not found on the server."
+        ) from exc
     if result.returncode != 0:
         if output_path.exists():
             output_path.unlink(missing_ok=True)
@@ -347,7 +556,7 @@ def extract_audio_from_video(video_path: str) -> str:
 
 def transcribe_video_audio(audio_path: str) -> str:
     # Prefer Sarvam for video transcription when configured.
-    sarvam_configured = bool(settings.SARVAM_API_KEY or settings.SARVAM_BASE_URL)
+    sarvam_configured = bool(settings.SARVAM_API_KEY and settings.SARVAM_BASE_URL)
     if sarvam_configured:
         try:
             return transcribe_file_with_sarvam(audio_path, mime_type="audio/wav")
@@ -361,24 +570,30 @@ def transcribe_video_audio(audio_path: str) -> str:
 def generate_embedding(text: str) -> list[float]:
     sanitized = sanitize_user_text(text)
     _, base_url, model = _provider_config("embedding")
-    response = requests.post(
-        f"{base_url}/embeddings",
-        headers=_provider_headers("embedding", include_json=True),
-        data=json.dumps(
-            {
-                "model": model,
-                "input": sanitized,
-            }
-        ),
-        timeout=60,
-    )
+    try:
+        response = requests.post(
+            f"{base_url}/embeddings",
+            headers=_provider_headers("embedding", include_json=True),
+            data=json.dumps(
+                {
+                    "model": model,
+                    "input": sanitized,
+                }
+            ),
+            timeout=60,
+        )
+    except requests.RequestException as exc:
+        raise AIServiceError(f"Embedding request failed: {exc}") from exc
     if not response.ok:
         raise AIServiceError(
             f"Embedding generation failed: {response.status_code} {response.text[:200]}"
         )
 
-    payload = response.json()
-    embedding = payload["data"][0]["embedding"]
+    try:
+        payload = response.json()
+        embedding = payload["data"][0]["embedding"]
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise AIServiceError("Embedding response format was invalid.") from exc
     if not isinstance(embedding, list):
         raise AIServiceError("Embedding response format was invalid.")
     return embedding
