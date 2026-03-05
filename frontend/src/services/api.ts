@@ -1,4 +1,25 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const ENV_API_BASE_URL = process.env.REACT_APP_API_URL?.trim();
+
+const buildApiBaseUrlCandidates = (): string[] => {
+  if (ENV_API_BASE_URL) {
+    return [ENV_API_BASE_URL];
+  }
+
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  const primary = `http://${hostname}:8000`;
+
+  if (hostname === 'localhost') {
+    return [primary, 'http://127.0.0.1:8000'];
+  }
+
+  if (hostname === '127.0.0.1') {
+    return [primary, 'http://localhost:8000'];
+  }
+
+  return [primary];
+};
+
+const API_BASE_URL_CANDIDATES = buildApiBaseUrlCandidates();
 
 export interface User {
   id: number;
@@ -59,6 +80,7 @@ export interface AgentQueryResponse {
 
 class ApiService {
   private token: string | null = null;
+  private apiBaseUrl: string = API_BASE_URL_CANDIDATES[0];
 
   setToken(token: string | null) {
     this.token = token;
@@ -93,10 +115,31 @@ class ApiService {
       (headers as Record<string, string>)['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    const candidateBaseUrls = [
+      this.apiBaseUrl,
+      ...API_BASE_URL_CANDIDATES.filter((url) => url !== this.apiBaseUrl),
+    ];
+
+    let response: Response | null = null;
+    const connectionErrors: string[] = [];
+
+    for (const baseUrl of candidateBaseUrls) {
+      try {
+        response = await fetch(`${baseUrl}${endpoint}`, {
+          ...options,
+          headers,
+        });
+        this.apiBaseUrl = baseUrl;
+        break;
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : 'Unknown network error';
+        connectionErrors.push(`${baseUrl} (${detail})`);
+      }
+    }
+
+    if (!response) {
+      throw new Error(`Cannot reach API. Tried: ${connectionErrors.join('; ')}`);
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'An error occurred' }));
