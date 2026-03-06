@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     MIN_SEARCH_SIMILARITY: float = 0.2
     PROMPT_GUARD_MAX_QUERY_CHARS: int = 4000
     
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+    GITHUB_CLIENT_ID: str | None = None
+    GITHUB_CLIENT_SECRET: str | None = None
+    FRONTEND_URL: str = "http://localhost:3000"
+    
     class Config:
         env_file = Path(__file__).parent.parent.parent / ".env"
         extra = "allow"
