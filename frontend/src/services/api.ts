@@ -98,6 +98,10 @@ class ApiService {
     return this.token;
   }
 
+  getApiBaseUrl(): string {
+    return this.apiBaseUrl;
+  }
+
   private async requestRaw(
     endpoint: string,
     options: RequestInit = {}
