@@ -70,6 +70,13 @@
       "context": "/bb/39fb558212/8/context.md",
       "content_hash": "/bb/39fb558212/8/content_hash.txt",
       "prompt": "/bb/39fb558212/8/prompt.txt"
+    },
+    {
+      "metadata": "/bb/39fb558212/9/metadata.json",
+      "transcript": "/bb/39fb558212/9/full.jsonl",
+      "context": "/bb/39fb558212/9/context.md",
+      "content_hash": "/bb/39fb558212/9/content_hash.txt",
+      "prompt": "/bb/39fb558212/9/prompt.txt"
     }
   ],
   "token_usage": {
