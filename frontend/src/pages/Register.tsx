@@ -44,17 +44,50 @@ questions about your recordings.</p>
           </div>
 
           <div className="mock-visual">
-            <div className="mock-bar"></div>
-            <div className="mock-bar short"></div>
-            <div className="mock-wave">
-              <div className="wave-block"></div>
-              <div className="wave-block tall"></div>
-              <div className="wave-block medium"></div>
-              <div className="wave-block tall"></div>
-              <div className="wave-block short"></div>
-              <div className="wave-block medium"></div>
-              <div className="wave-block tall"></div>
-              <div className="wave-block"></div>
+            <div className="mock-visual-label">
+              <span className="rec-dot"></span>
+              Recording_001.webm  •  02:34
+            </div>
+            <div className="waveform">
+              <div className="wf-bar" style={{"--h": "30%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "60%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "45%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "80%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "55%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "95%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "40%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "70%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "85%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "50%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "100%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "60%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "75%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "35%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "90%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "55%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "65%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "40%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "80%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "25%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "70%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "50%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "88%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "42%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "60%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "33%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "78%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "55%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "45%"} as React.CSSProperties}></div>
+              <div className="wf-bar" style={{"--h": "20%"} as React.CSSProperties}></div>
+            </div>
+            <div className="mock-visual-footer">
+              <span>00:00</span>
+              <div className="playback-controls">
+                <span className="ctrl-btn">⏮</span>
+                <span className="ctrl-btn play">▶</span>
+                <span className="ctrl-btn">⏭</span>
+              </div>
+              <span>02:34</span>
             </div>
           </div>
         </div>
