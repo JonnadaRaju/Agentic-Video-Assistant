@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "22222a02591b",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "backend/API_CONTRACT_AI.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/22/222a02591b/0/metadata.json",
+      "transcript": "/22/222a02591b/0/full.jsonl",
+      "context": "/22/222a02591b/0/context.md",
+      "content_hash": "/22/222a02591b/0/content_hash.txt",
+      "prompt": "/22/222a02591b/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
