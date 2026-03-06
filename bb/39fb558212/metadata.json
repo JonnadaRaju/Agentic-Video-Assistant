@@ -49,6 +49,13 @@
       "context": "/bb/39fb558212/5/context.md",
       "content_hash": "/bb/39fb558212/5/content_hash.txt",
       "prompt": "/bb/39fb558212/5/prompt.txt"
+    },
+    {
+      "metadata": "/bb/39fb558212/6/metadata.json",
+      "transcript": "/bb/39fb558212/6/full.jsonl",
+      "context": "/bb/39fb558212/6/context.md",
+      "content_hash": "/bb/39fb558212/6/content_hash.txt",
+      "prompt": "/bb/39fb558212/6/prompt.txt"
     }
   ],
   "token_usage": {
