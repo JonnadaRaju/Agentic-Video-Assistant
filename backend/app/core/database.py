@@ -52,6 +52,10 @@ async def init_db():
         "ALTER TABLE audio_recordings ADD COLUMN IF NOT EXISTS transcript TEXT",
         "ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS transcript TEXT",
         "ALTER TABLE video_recordings ADD COLUMN IF NOT EXISTS summary TEXT",
+        "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider VARCHAR(50)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id VARCHAR(255)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_email VARCHAR(255)",
     ]
 
     embedding_column_type = "VECTOR(1536)" if vector_type_available else "JSONB"
